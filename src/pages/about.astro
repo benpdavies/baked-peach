@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="About" description="About the photographer.">
+  <h1 class="page-title">About</h1>
+
+  <div class="about">
+    <p>
+      {/* Placeholder bio — replace with your own. */}
+      I'm a photographer based in [City, Country], working mostly in landscapes, street,
+      and portraiture. I've been shooting for [X years] and I'm currently focused on
+      [current project or theme]. This site collects a running selection of that work.
+    </p>
+    <p>
+      I shoot with [camera/format], usually [habit or approach worth mentioning —
+      e.g. "one lens, no crop," "only available light," "large format on weekends"].
+    </p>
+
+    <h2 class="about__subhead">Contact</h2>
+    <p>
+      {/* Placeholder contact info — swap in real details. */}
+      Email: <a href="mailto:you@example.com">you@example.com</a><br />
+      Instagram: <a href="https://instagram.com/yourhandle">@yourhandle</a>
+    </p>
+  </div>
+</BaseLayout>
+
+<style>
+  .about {
+    max-width: 38rem;
+  }
+
+  .about__subhead {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: var(--space-lg);
+  }
+</style>

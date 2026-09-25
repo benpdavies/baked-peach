@@ -1,0 +1,118 @@
+---
+import { getImage } from 'astro:assets';
+import { getEntry } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import ResponsiveImage from '../../../components/ResponsiveImage.astro';
+import { getAllPhotos, getAdjacentPhotos, photoSlug, photoUrl, albumUrl } from '../../../lib/photos';
+
+export async function getStaticPaths() {
+  const photos = await getAllPhotos();
+  return Promise.all(
+    photos.map(async (photo) => ({
+      params: { album: photo.data.album.id, slug: photoSlug(photo) },
+      props: { photo, ...(await getAdjacentPhotos(photo)) },
+    }))
+  );
+}
+
+const { photo, prev, next } = Astro.props;
+const album = await getEntry(photo.data.album);
+
+// A JPEG variant sized for social previews — OG readers don't reliably
+// support WebP/AVIF, so this is generated separately from the on-page image.
+const ogImage = await getImage({ src: photo.data.image, width: 1200, format: 'jpeg', quality: 80 });
+---
+
+<BaseLayout
+  title={photo.data.title}
+  description={photo.data.description ?? `${photo.data.title} — from the ${album.data.title} album.`}
+  ogImage={{ src: ogImage.src, width: ogImage.attributes.width, height: ogImage.attributes.height }}
+>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={albumUrl(album.id)}>&larr; {album.data.title}</a>
+  </nav>
+
+  <figure class="photo-detail">
+    <ResponsiveImage image={photo.data.image} alt={photo.data.title} layout="full-width" priority />
+    <figcaption class="photo-detail__caption">
+      <h1 class="photo-detail__title">{photo.data.title}</h1>
+      {photo.data.description && <p class="photo-detail__description">{photo.data.description}</p>}
+      <p class="photo-detail__meta">
+        {photo.data.date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+      </p>
+    </figcaption>
+  </figure>
+
+  <nav class="photo-detail__pager" aria-label="Photo navigation">
+    {
+      prev ? (
+        <a href={photoUrl(prev)} rel="prev">&larr; {prev.data.title}</a>
+      ) : (
+        <span />
+      )
+    }
+    {
+      next ? (
+        <a href={photoUrl(next)} rel="next">{next.data.title} &rarr;</a>
+      ) : (
+        <span />
+      )
+    }
+  </nav>
+</BaseLayout>
+
+<style>
+  .breadcrumb {
+    margin-bottom: var(--space-md);
+    font-size: 0.9rem;
+  }
+
+  .breadcrumb a {
+    text-decoration: none;
+    color: var(--color-text-muted);
+  }
+
+  .photo-detail {
+    margin: 0 0 var(--space-lg);
+  }
+
+  .photo-detail__caption {
+    padding-top: var(--space-sm);
+  }
+
+  .photo-detail__title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+  }
+
+  .photo-detail__description {
+    color: var(--color-text-muted);
+    max-width: 40rem;
+    margin: 0 0 0.5rem;
+  }
+
+  .photo-detail__meta {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .photo-detail__pager {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-md);
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-md);
+    font-size: 0.9rem;
+  }
+
+  .photo-detail__pager a {
+    text-decoration: none;
+    color: var(--color-text);
+  }
+
+  .photo-detail__pager a:hover {
+    text-decoration: underline;
+  }
+</style>

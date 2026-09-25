@@ -1,0 +1,108 @@
+---
+import { getImage } from 'astro:assets';
+import { getEntry } from 'astro:content';
+import ResponsiveImage from './ResponsiveImage.astro';
+import { photoUrl, type Photo } from '../lib/photos';
+
+interface Props {
+  photos: Photo[];
+  /** Show which album each photo belongs to (used on the home page, which mixes albums). */
+  showAlbumLabel?: boolean;
+}
+
+const { photos, showAlbumLabel = false } = Astro.props;
+
+const items = await Promise.all(
+  photos.map(async (photo) => {
+    const lightboxWidth = Math.min(photo.data.image.width, 1920);
+    const lightbox = await getImage({ src: photo.data.image, width: lightboxWidth, format: 'webp', quality: 82 });
+    const album = showAlbumLabel ? await getEntry(photo.data.album) : null;
+    return { photo, lightbox, albumTitle: album?.data.title };
+  })
+);
+---
+
+<ul class="photo-grid">
+  {
+    items.map(({ photo, lightbox, albumTitle }) => (
+      <li class="photo-grid__item">
+        <a
+          href={photoUrl(photo)}
+          class="photo-grid__link js-lightbox-item"
+          data-lightbox-src={lightbox.src}
+          data-lightbox-width={photo.data.image.width}
+          data-lightbox-height={photo.data.image.height}
+          data-lightbox-title={photo.data.title}
+          data-lightbox-caption={photo.data.description ?? ''}
+          data-lightbox-href={photoUrl(photo)}
+        >
+          <ResponsiveImage image={photo.data.image} alt={photo.data.title} layout="constrained" width={480} />
+          <span class="photo-grid__caption">
+            <span class="photo-grid__title">{photo.data.title}</span>
+            {albumTitle && <span class="photo-grid__album">{albumTitle}</span>}
+          </span>
+        </a>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  .photo-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    columns: 1;
+    column-gap: var(--space-md);
+  }
+
+  @media (min-width: 40rem) {
+    .photo-grid {
+      columns: 2;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .photo-grid {
+      columns: 3;
+    }
+  }
+
+  @media (min-width: 90rem) {
+    .photo-grid {
+      columns: 4;
+    }
+  }
+
+  .photo-grid__item {
+    break-inside: avoid;
+    margin-bottom: var(--space-md);
+  }
+
+  .photo-grid__link {
+    display: block;
+    position: relative;
+    color: inherit;
+    text-decoration: none;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .photo-grid__caption {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding-block: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .photo-grid__title {
+    color: var(--color-text);
+  }
+
+  .photo-grid__album {
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+</style>

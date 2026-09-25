@@ -1,0 +1,81 @@
+---
+import { Image, getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  image: ImageMetadata;
+  alt: string;
+  /** `constrained` for grid thumbnails (needs `width`), `full-width` for detail views. */
+  layout: 'constrained' | 'full-width';
+  width?: number;
+  /** Skip lazy-loading + blur fade-in for above-the-fold images. */
+  priority?: boolean;
+  class?: string;
+}
+
+const { image, alt, layout, width, priority = false, class: className } = Astro.props;
+
+// A tiny, heavily-blurred stand-in shown while the real image loads.
+const placeholder = await getImage({ src: image, width: 24, quality: 20, format: 'webp' });
+---
+
+<span class:list={['img-frame', className]}>
+  <span class="img-placeholder" style={`background-image:url(${placeholder.src})`} aria-hidden="true"></span>
+  {
+    layout === 'constrained' ? (
+      <Image
+        src={image}
+        alt={alt}
+        layout="constrained"
+        width={width}
+        format="webp"
+        loading={priority ? 'eager' : 'lazy'}
+        decoding={priority ? 'sync' : 'async'}
+        class="img-real"
+        onload="this.classList.add('is-loaded')"
+      />
+    ) : (
+      <Image
+        src={image}
+        alt={alt}
+        layout="full-width"
+        format="webp"
+        loading={priority ? 'eager' : 'lazy'}
+        decoding={priority ? 'sync' : 'async'}
+        class="img-real"
+        onload="this.classList.add('is-loaded')"
+      />
+    )
+  }
+</span>
+
+<style>
+  .img-frame {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    background-color: var(--color-surface-muted);
+  }
+
+  .img-placeholder {
+    position: absolute;
+    inset: -10%;
+    background-size: cover;
+    background-position: center;
+    filter: blur(16px);
+    transform: scale(1.15);
+  }
+
+  .img-real {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: auto;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+
+  .img-real.is-loaded {
+    opacity: 1;
+  }
+</style>

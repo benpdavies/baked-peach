@@ -1,0 +1,203 @@
+---
+// Wraps a <PhotoGrid /> and adds full-screen viewing for its thumbnails.
+//
+// This is the one piece of the site that ships meaningful client JS. It's a
+// plain custom element (no UI framework) so the "island" is just a few KB of
+// vanilla script rather than a framework runtime — Astro already ships zero
+// JS by default, so a framework here would work against that, not for it.
+// Thumbnails are real <a> links to the photo's detail page, so the gallery
+// is fully usable with JavaScript disabled; this just intercepts clicks to
+// present an overlay instead of navigating.
+---
+
+<photo-lightbox>
+  <slot />
+
+  <dialog class="lightbox">
+    <button type="button" class="lightbox__close" data-action="close" aria-label="Close">✕</button>
+    <button type="button" class="lightbox__nav lightbox__nav--prev" data-action="prev" aria-label="Previous photo">‹</button>
+    <figure class="lightbox__figure">
+      <img class="lightbox__image" alt="" />
+      <figcaption class="lightbox__caption">
+        <span class="lightbox__title"></span>
+        <a class="lightbox__link" href="#">View details →</a>
+      </figcaption>
+    </figure>
+    <button type="button" class="lightbox__nav lightbox__nav--next" data-action="next" aria-label="Next photo">›</button>
+  </dialog>
+</photo-lightbox>
+
+<style>
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    max-width: 100vw;
+    max-height: 100vh;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: var(--color-bg-overlay, rgba(10, 10, 10, 0.96));
+    color: #f2f2f2;
+  }
+
+  .lightbox::backdrop {
+    background: transparent;
+  }
+
+  .lightbox[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .lightbox__figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    max-width: min(92vw, 1600px);
+    max-height: 92vh;
+    margin: 0;
+  }
+
+  .lightbox__image {
+    max-width: 100%;
+    max-height: 78vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .lightbox__caption {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    font-size: 0.9rem;
+    color: #d8d8d8;
+    text-align: center;
+  }
+
+  .lightbox__link {
+    color: #f2f2f2;
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  .lightbox__close,
+  .lightbox__nav {
+    position: absolute;
+    background: transparent;
+    border: 0;
+    color: #f2f2f2;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.75rem;
+  }
+
+  .lightbox__close {
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 1.5rem;
+  }
+
+  .lightbox__nav {
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 2.5rem;
+  }
+
+  .lightbox__nav--prev {
+    left: 0.5rem;
+  }
+
+  .lightbox__nav--next {
+    right: 0.5rem;
+  }
+
+  .lightbox__close:hover,
+  .lightbox__nav:hover {
+    color: #ffffff;
+  }
+</style>
+
+<script>
+  class PhotoLightbox extends HTMLElement {
+    dialog: HTMLDialogElement;
+    image: HTMLImageElement;
+    titleEl: HTMLElement;
+    linkEl: HTMLAnchorElement;
+    items: HTMLAnchorElement[] = [];
+    currentIndex = -1;
+    lastFocused: HTMLElement | null = null;
+
+    constructor() {
+      super();
+      this.dialog = this.querySelector('dialog') as HTMLDialogElement;
+      this.image = this.querySelector('.lightbox__image') as HTMLImageElement;
+      this.titleEl = this.querySelector('.lightbox__title') as HTMLElement;
+      this.linkEl = this.querySelector('.lightbox__link') as HTMLAnchorElement;
+    }
+
+    connectedCallback() {
+      this.items = Array.from(this.querySelectorAll('a.js-lightbox-item'));
+
+      this.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        const trigger = target.closest('a.js-lightbox-item') as HTMLAnchorElement | null;
+        if (trigger) {
+          event.preventDefault();
+          this.open(this.items.indexOf(trigger), trigger);
+        }
+      });
+
+      this.dialog.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        const action = target.closest('[data-action]')?.getAttribute('data-action');
+        if (action === 'close') this.close();
+        if (action === 'prev') this.show(this.currentIndex - 1);
+        if (action === 'next') this.show(this.currentIndex + 1);
+        // Click on the backdrop itself (not any child) closes too.
+        if (event.target === this.dialog) this.close();
+      });
+
+      this.dialog.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft') this.show(this.currentIndex - 1);
+        if (event.key === 'ArrowRight') this.show(this.currentIndex + 1);
+      });
+
+      // Native <dialog> already closes on Escape; just restore focus after.
+      this.dialog.addEventListener('close', () => {
+        this.lastFocused?.focus();
+      });
+    }
+
+    open(index: number, trigger: HTMLAnchorElement) {
+      this.lastFocused = trigger;
+      this.show(index);
+      this.dialog.showModal();
+    }
+
+    close() {
+      this.dialog.close();
+    }
+
+    show(index: number) {
+      if (this.items.length === 0) return;
+      const wrapped = (index + this.items.length) % this.items.length;
+      const item = this.items[wrapped];
+      this.currentIndex = wrapped;
+
+      this.image.src = item.dataset.lightboxSrc ?? '';
+      this.image.width = Number(item.dataset.lightboxWidth ?? 0);
+      this.image.height = Number(item.dataset.lightboxHeight ?? 0);
+      this.image.alt = item.dataset.lightboxTitle ?? '';
+      this.titleEl.textContent = item.dataset.lightboxTitle ?? '';
+      this.linkEl.href = item.dataset.lightboxHref ?? item.href;
+    }
+  }
+
+  customElements.define('photo-lightbox', PhotoLightbox);
+</script>
