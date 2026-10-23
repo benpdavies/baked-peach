@@ -9,7 +9,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "add-photos": "node scripts/add-photos.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "exifr": "^7.1.3",
     "typescript": "^6.0.3"
   }
 }
