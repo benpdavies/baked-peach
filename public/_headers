@@ -1,0 +1,5 @@
+# Cloudflare Pages response headers.
+# Everything under /_astro/ has a content hash in its filename, so it can be
+# cached forever; a changed file gets a new name.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable

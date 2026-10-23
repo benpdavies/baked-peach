@@ -1,5 +1,6 @@
 ---
 import { getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
 import ResponsiveImage from './ResponsiveImage.astro';
 import { photoLabel, photoMonthYear, photoSlug, type Photo } from '../lib/photos';
 
@@ -11,23 +12,26 @@ const { photos } = Astro.props;
 
 const items = await Promise.all(
   photos.map(async (photo) => {
-    const { width } = photo.data.image;
+    // Read dimensions from Astro's (private) clone: touching any property of the
+    // imported image itself marks the full-size original as used, and the build
+    // then copies it into dist/ even though nothing links to it.
+    const { width, height } = (photo.data.image as typeof photo.data.image & { clone: ImageMetadata }).clone;
     const lightbox = await getImage({ src: photo.data.image, width: Math.min(width, 2560), format: 'webp', quality: 92 });
-    return { photo, lightbox };
+    return { photo, width, height, lightbox };
   })
 );
 ---
 
 <ol class="photos">
   {
-    items.map(({ photo, lightbox }) => (
+    items.map(({ photo, width, height, lightbox }) => (
       <li class="photo" id={photoSlug(photo)}>
         <a
           href={lightbox.src}
           class="photo__link js-lightbox-item"
           data-lightbox-src={lightbox.src}
-          data-lightbox-width={photo.data.image.width}
-          data-lightbox-height={photo.data.image.height}
+          data-lightbox-width={width}
+          data-lightbox-height={height}
           data-lightbox-slug={photoSlug(photo)}
           data-lightbox-title={photoLabel(photo)}
           data-lightbox-location={photo.data.location ?? ''}

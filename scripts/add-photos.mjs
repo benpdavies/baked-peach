@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Imports photos into the site: reads the EXIF capture date, converts HEIC to
-// JPEG (Photos.app exports HEIC by default and Astro's image pipeline can't
-// decode it), and writes the matching src/content/photos/<slug>.md entry.
+// Imports photos into the site: reads the EXIF capture date, scales each photo
+// down to a MAX_EDGE master as a high-quality JPEG (converting HEIC, which
+// Photos.app exports by default and Astro's image pipeline can't decode), and
+// writes the matching src/content/photos/<slug>.md entry. Full-size camera
+// files stay in Photos.app (or the source folder) — they're too big to keep in git.
 //
 // Usage:
 //   npm run add-photos                  select photos in Photos.app first, then run this
@@ -14,6 +16,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import exifr from 'exifr';
+import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -22,6 +25,11 @@ const CONTENT_DIR = path.join(ROOT, 'src/content/photos');
 const APPLESCRIPT = path.join(__dirname, 'export-selection.applescript');
 
 const IMAGE_EXTENSIONS = new Set(['.heic', '.heif', '.jpg', '.jpeg', '.png', '.tif', '.tiff']);
+
+// Longest edge of the master committed to git. The site serves at most 2560px
+// (lightbox), so this leaves headroom for larger sizes later without storing
+// the camera's full 16MP+ file.
+const MAX_EDGE = 3840;
 
 function slugify(name) {
   return name
@@ -73,6 +81,33 @@ async function getCaptureDate(filePath) {
   return { date: (await stat(filePath)).mtime, fromExif: false };
 }
 
+// Writes `file` to `destImage` as a JPEG no larger than MAX_EDGE, keeping EXIF
+// and the colour profile. JPEGs already within MAX_EDGE are copied untouched to
+// avoid a needless re-encode.
+async function writeMaster(file, destImage, scratchDir) {
+  const ext = path.extname(file).toLowerCase();
+  let source = file;
+  if (ext === '.heic' || ext === '.heif') {
+    // sharp's prebuilt binaries can't decode HEIC; sips converts it losslessly to TIFF first.
+    source = path.join(scratchDir, `${path.basename(file, ext)}.tiff`);
+    execFileSync('sips', ['-s', 'format', 'tiff', file, '--out', source], { stdio: 'ignore' });
+  }
+  const { width, height, orientation } = await sharp(source).metadata();
+  const isJpeg = ext === '.jpg' || ext === '.jpeg';
+  if (isJpeg && Math.max(width, height) <= MAX_EDGE && (orientation ?? 1) === 1) {
+    await copyFile(source, destImage);
+  } else {
+    await sharp(source)
+      .rotate() // apply the EXIF orientation to the pixels
+      .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+      .keepExif()
+      .keepIccProfile()
+      .jpeg({ quality: 95, chromaSubsampling: '4:4:4', mozjpeg: true })
+      .toFile(destImage);
+  }
+  if (source !== file) await rm(source, { force: true });
+}
+
 async function exportSelectionFromPhotos(destDir) {
   console.log('Exporting the current selection from Photos.app…');
   try {
@@ -115,6 +150,7 @@ async function main() {
   }
 
   const slugs = await existingSlugs();
+  const scratchDir = await mkdtemp(path.join(tmpdir(), 'baked-peach-convert-'));
   const added = [];
 
   for (const file of files) {
@@ -126,18 +162,13 @@ async function main() {
     slugs.add(slug);
 
     const ext = path.extname(file).toLowerCase();
-    const isHeic = ext === '.heic' || ext === '.heif';
-    const destExt = isHeic ? '.jpg' : ext;
+    const destExt = ext === '.jpeg' ? ext : '.jpg';
     const destImage = path.join(ASSETS_DIR, `${slug}${destExt}`);
 
     const { date, fromExif } = await getCaptureDate(file);
     const dateString = formatDate(date);
 
-    if (isHeic) {
-      execFileSync('sips', ['-s', 'format', 'jpeg', file, '--out', destImage], { stdio: 'ignore' });
-    } else {
-      await copyFile(file, destImage);
-    }
+    await writeMaster(file, destImage, scratchDir);
 
     const frontmatter = [
       '---',
@@ -155,6 +186,7 @@ async function main() {
   }
 
   if (tempDir) await rm(tempDir, { recursive: true, force: true });
+  await rm(scratchDir, { recursive: true, force: true });
 
   // The site orders photos newest first by date — match that here.
   added.sort((a, b) => b.dateString.localeCompare(a.dateString));

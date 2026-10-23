@@ -25,6 +25,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Astro caches every resized image in node_modules/.astro, so restoring it
+      # means only new or changed photos get processed. Restored after `npm ci`,
+      # which wipes node_modules. The key changes whenever the photos do, so a
+      # fresh cache is saved after each photo change.
+      - name: Cache optimised images
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.astro
+          key: astro-images-${{ hashFiles('src/assets/photos/**', 'package-lock.json') }}
+          restore-keys: astro-images-
+
       - name: Build
         run: npm run build
 
