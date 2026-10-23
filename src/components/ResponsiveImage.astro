@@ -8,12 +8,14 @@ interface Props {
   /** `constrained` for grid thumbnails (needs `width`), `full-width` for detail views. */
   layout: 'constrained' | 'full-width';
   width?: number;
+  /** Overrides the generated `sizes` when the image renders narrower than the viewport. */
+  sizes?: string;
   /** Skip lazy-loading + blur fade-in for above-the-fold images. */
   priority?: boolean;
   class?: string;
 }
 
-const { image, alt, layout, width, priority = false, class: className } = Astro.props;
+const { image, alt, layout, width, sizes, priority = false, class: className } = Astro.props;
 
 // A tiny, heavily-blurred stand-in shown while the real image loads.
 const placeholder = await getImage({ src: image, width: 24, quality: 20, format: 'webp' });
@@ -28,6 +30,7 @@ const placeholder = await getImage({ src: image, width: 24, quality: 20, format:
         alt={alt}
         layout="constrained"
         width={width}
+        sizes={sizes}
         format="webp"
         loading={priority ? 'eager' : 'lazy'}
         decoding={priority ? 'sync' : 'async'}

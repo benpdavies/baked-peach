@@ -1,36 +1,23 @@
-import { defineCollection, reference } from 'astro:content';
+import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-// Album metadata lives as plain data files (no body content needed).
-// One file per album: src/content/albums/<slug>.json
-const albums = defineCollection({
-  loader: glob({ pattern: '**/*.json', base: './src/content/albums' }),
-  schema: z.object({
-    title: z.string(),
-    description: z.string().optional(),
-    // Order albums on the /albums index; lower first. Defaults to alphabetical.
-    order: z.number().optional(),
-  }),
-});
-
-// One markdown entry per photo, grouped into folders per album purely for
-// editor convenience — the `album` frontmatter field (not the folder path)
-// is the source of truth for which album a photo belongs to.
+// One markdown entry per photo.
 const photos = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/photos' }),
   schema: ({ image }) =>
     z.object({
       title: z.string(),
-      album: reference('albums'),
+      // When the photo was taken, e.g. `2026-03-14` or `2026-03-14T16:45:00`.
+      // Newest first is decided by this.
       date: z.coerce.date(),
       description: z.string().optional(),
+      // Where it was taken, e.g. `Watamu, Kenya`. Shown instead of the title.
+      location: z.string().optional(),
       // Path to the source image in src/assets/photos/** — Astro validates
       // this at build time and gives us width/height/format for free.
       image: image(),
-      // Hand-picked photos to surface on the home page grid.
-      featured: z.boolean().default(false),
     }),
 });
 
-export const collections = { albums, photos };
+export const collections = { photos };

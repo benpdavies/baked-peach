@@ -2,14 +2,13 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Lightbox from '../components/Lightbox.astro';
 import PhotoGrid from '../components/PhotoGrid.astro';
-import { getFeaturedPhotos } from '../lib/photos';
+import { getAllPhotos } from '../lib/photos';
 
-const photos = await getFeaturedPhotos(12);
+const photos = await getAllPhotos();
 ---
 
-<BaseLayout title="Your Name Photography" description="A photography portfolio — landscapes, street, and portrait work.">
-  <h1 class="visually-hidden">Photography portfolio</h1>
+<BaseLayout title="Your Name Photography" description="A photography portfolio, newest first.">
   <Lightbox>
-    <PhotoGrid photos={photos} showAlbumLabel />
+    <PhotoGrid photos={photos} />
   </Lightbox>
 </BaseLayout>

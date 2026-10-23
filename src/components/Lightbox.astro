@@ -1,26 +1,38 @@
 ---
-// Wraps a <PhotoGrid /> and adds full-screen viewing for its thumbnails.
+// Wraps a <PhotoGrid /> and enlarges a photo over the page when it's clicked.
 //
 // This is the one piece of the site that ships meaningful client JS. It's a
 // plain custom element (no UI framework) so the "island" is just a few KB of
 // vanilla script rather than a framework runtime — Astro already ships zero
 // JS by default, so a framework here would work against that, not for it.
-// Thumbnails are real <a> links to the photo's detail page, so the gallery
-// is fully usable with JavaScript disabled; this just intercepts clicks to
-// present an overlay instead of navigating.
+// Thumbnails are real <a> links to the full-size image, so the gallery is
+// usable with JavaScript disabled; this just intercepts clicks to present an
+// overlay instead of navigating.
+//
+// Behaviour:
+//   - click a thumbnail: the photo grows out of it into the lightbox
+//   - click the photo: zoom to full size (drag or scroll to pan); click again to zoom out
+//   - click outside the photo / Esc / ✕: zoom out if zoomed, else shrink back into the grid
+//   - ‹ › / arrow keys / swipe: previous or next photo (wraps around)
+//
+// In `astro dev` only, the caption has a text box for the photo's location
+// that saves into its .md file (see `editLocationInDev` in astro.config.mjs).
+const dev = import.meta.env.DEV;
 ---
 
 <photo-lightbox>
   <slot />
 
-  <dialog class="lightbox">
+  <dialog class="lightbox" aria-label="Photo viewer">
     <button type="button" class="lightbox__close" data-action="close" aria-label="Close">✕</button>
     <button type="button" class="lightbox__nav lightbox__nav--prev" data-action="prev" aria-label="Previous photo">‹</button>
     <figure class="lightbox__figure">
       <img class="lightbox__image" alt="" />
       <figcaption class="lightbox__caption">
+        <span class="lightbox__meta"></span>
         <span class="lightbox__title"></span>
-        <a class="lightbox__link" href="#">View details →</a>
+        {dev && <input type="text" class="lightbox__location-input" placeholder="Location, e.g. Watamu, Kenya" aria-label="Location (dev only)" autocomplete="off" />}
+        <span class="lightbox__description"></span>
       </figcaption>
     </figure>
     <button type="button" class="lightbox__nav lightbox__nav--next" data-action="next" aria-label="Next photo">›</button>
@@ -32,18 +44,29 @@
     position: fixed;
     inset: 0;
     max-width: 100vw;
-    max-height: 100vh;
+    max-height: 100dvh;
     width: 100%;
     height: 100%;
     border: 0;
     padding: 0;
     margin: 0;
-    background: var(--color-bg-overlay, rgba(10, 10, 10, 0.96));
-    color: #f2f2f2;
+    background: transparent;
+    color: #f2f2f0;
+    overflow: hidden;
   }
 
+  /* Grey the page out rather than hiding it, so the catalogue stays visible behind. */
   .lightbox::backdrop {
-    background: transparent;
+    background: rgb(28 28 26 / 0.6);
+    backdrop-filter: grayscale(1) blur(4px);
+    -webkit-backdrop-filter: grayscale(1) blur(4px);
+    animation: lightbox-fade 0.35s ease both;
+  }
+
+  .lightbox.is-closing::backdrop,
+  .lightbox.is-closing .lightbox__caption,
+  .lightbox.is-closing button {
+    animation: lightbox-fade 0.3s ease reverse both;
   }
 
   .lightbox[open] {
@@ -56,45 +79,99 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
-    max-width: min(92vw, 1600px);
-    max-height: 92vh;
+    gap: 0.9rem;
     margin: 0;
   }
 
   .lightbox__image {
-    max-width: 100%;
-    max-height: 78vh;
-    width: auto;
+    /* --ar is set from the photo's dimensions so the box has its final size
+       before the image loads — the grow-from-thumbnail animation measures it. */
+    width: min(92vw, calc(82dvh * var(--ar, 1.333)));
     height: auto;
-    object-fit: contain;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    aspect-ratio: var(--ar, 1.333);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+    cursor: zoom-in;
+    transform-origin: center;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Zoomed: the photo is moved by transform (see `zoomIn`), so let pointer
+     drags pan it rather than scrolling the page. */
+  .lightbox.is-zoomed .lightbox__image {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .lightbox.is-panning .lightbox__image {
+    cursor: grabbing;
+  }
+
+  .lightbox.is-zoomed .lightbox__caption,
+  .lightbox.is-zoomed .lightbox__nav {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
   }
 
   .lightbox__caption {
     display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    font-size: 0.9rem;
-    color: #d8d8d8;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.4rem 1.25rem;
+    max-width: min(92vw, 48rem);
+    font-size: 0.85rem;
     text-align: center;
+    animation: lightbox-fade 0.4s 0.15s ease both;
   }
 
-  .lightbox__link {
-    color: #f2f2f2;
-    text-decoration: underline;
-    white-space: nowrap;
+  .lightbox__meta {
+    font-family: var(--font-serif);
+    font-variant-numeric: oldstyle-nums;
+    color: #c8c8c4;
+  }
+
+  .lightbox__location-input {
+    font: inherit;
+    color: inherit;
+    text-align: center;
+    background: rgb(255 255 255 / 0.1);
+    border: 1px dashed rgb(255 255 255 / 0.4);
+    border-radius: 3px;
+    padding: 0.2rem 0.5rem;
+    min-width: 16rem;
+  }
+
+  .lightbox__location-input.is-saved {
+    border-color: #8fd18f;
+  }
+
+  .lightbox__location-input.is-error {
+    border-color: #ff8a80;
+  }
+
+  .lightbox__description {
+    flex-basis: 100%;
+    color: #d8d8d4;
+  }
+
+  .lightbox__description:empty {
+    display: none;
   }
 
   .lightbox__close,
   .lightbox__nav {
     position: absolute;
+    z-index: 1;
     background: transparent;
     border: 0;
-    color: #f2f2f2;
+    color: #f2f2f0;
     cursor: pointer;
     line-height: 1;
     padding: 0.75rem;
+    opacity: 0.8;
+    animation: lightbox-fade 0.35s ease both;
   }
 
   .lightbox__close {
@@ -106,96 +183,412 @@
   .lightbox__nav {
     top: 50%;
     transform: translateY(-50%);
-    font-size: 2.5rem;
+    font-size: 2.75rem;
   }
 
   .lightbox__nav--prev {
-    left: 0.5rem;
+    left: 0.25rem;
   }
 
   .lightbox__nav--next {
-    right: 0.5rem;
+    right: 0.25rem;
   }
 
   .lightbox__close:hover,
   .lightbox__nav:hover {
-    color: #ffffff;
+    opacity: 1;
+  }
+
+  @keyframes lightbox-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lightbox::backdrop,
+    .lightbox * {
+      animation: none !important;
+    }
   }
 </style>
 
 <script>
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const EASE = 'cubic-bezier(0.2, 0.7, 0.1, 1)';
+  const MAX_WIDTH = 2560; // matches the width PhotoGrid asks Astro to generate
+
+  // Full-size files that have been fetched and decoded, so paging is instant.
+  const decoded = new Map<string, Promise<void>>();
+  function preload(src: string | undefined): Promise<void> {
+    if (!src) return Promise.resolve();
+    let ready = decoded.get(src);
+    if (!ready) {
+      const img = new Image();
+      img.src = src;
+      ready = img.decode().catch(() => {});
+      decoded.set(src, ready);
+    }
+    return ready;
+  }
+
   class PhotoLightbox extends HTMLElement {
     dialog: HTMLDialogElement;
+    figure: HTMLElement;
     image: HTMLImageElement;
+    metaEl: HTMLElement;
     titleEl: HTMLElement;
-    linkEl: HTMLAnchorElement;
+    descriptionEl: HTMLElement;
+    locationInput: HTMLInputElement | null;
     items: HTMLAnchorElement[] = [];
+
+    /** The photo on screen, and the one most recently asked for (they differ while it loads). */
     currentIndex = -1;
-    lastFocused: HTMLElement | null = null;
+    requestedIndex = -1;
+    closing = false;
+
+    /** Zoom: scale and pan offset (px) relative to the un-zoomed position. */
+    zoomed = false;
+    scale = 1;
+    panX = 0;
+    panY = 0;
+    fit: DOMRect | null = null;
+    drag: { x: number; y: number; panX: number; panY: number; moved: boolean } | null = null;
+    pointerDownTarget: EventTarget | null = null;
 
     constructor() {
       super();
       this.dialog = this.querySelector('dialog') as HTMLDialogElement;
+      this.figure = this.querySelector('.lightbox__figure') as HTMLElement;
       this.image = this.querySelector('.lightbox__image') as HTMLImageElement;
+      this.metaEl = this.querySelector('.lightbox__meta') as HTMLElement;
       this.titleEl = this.querySelector('.lightbox__title') as HTMLElement;
-      this.linkEl = this.querySelector('.lightbox__link') as HTMLAnchorElement;
+      this.descriptionEl = this.querySelector('.lightbox__description') as HTMLElement;
+      this.locationInput = this.querySelector('.lightbox__location-input');
     }
 
     connectedCallback() {
       this.items = Array.from(this.querySelectorAll('a.js-lightbox-item'));
 
       this.addEventListener('click', (event) => {
-        const target = event.target as HTMLElement;
-        const trigger = target.closest('a.js-lightbox-item') as HTMLAnchorElement | null;
+        // Leave modified clicks alone so cmd/ctrl-click still opens the full-size image.
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const trigger = (event.target as HTMLElement).closest('a.js-lightbox-item') as HTMLAnchorElement | null;
         if (trigger) {
           event.preventDefault();
-          this.open(this.items.indexOf(trigger), trigger);
+          this.open(this.items.indexOf(trigger));
         }
       });
+
+      this.dialog.addEventListener('pointerdown', (event) => {
+        this.pointerDownTarget = event.target;
+        if (this.zoomed && event.target === this.image && event.button === 0) {
+          this.drag = { x: event.clientX, y: event.clientY, panX: this.panX, panY: this.panY, moved: false };
+          this.image.setPointerCapture(event.pointerId);
+        }
+      });
+
+      this.dialog.addEventListener('pointermove', (event) => {
+        if (!this.drag) return;
+        const dx = event.clientX - this.drag.x;
+        const dy = event.clientY - this.drag.y;
+        if (!this.drag.moved && Math.hypot(dx, dy) < 4) return;
+        this.drag.moved = true;
+        this.dialog.classList.add('is-panning');
+        this.panTo(this.drag.panX + dx, this.drag.panY + dy, false);
+      });
+
+      const endDrag = () => {
+        this.dialog.classList.remove('is-panning');
+        // The click that follows a drag must not toggle zoom, so keep the flag until it has fired.
+        if (this.drag?.moved) setTimeout(() => (this.drag = null), 0);
+        else this.drag = null;
+      };
+      this.dialog.addEventListener('pointerup', endDrag);
+      this.dialog.addEventListener('pointercancel', endDrag);
+
+      // Trackpad / wheel scrolling pans the zoomed photo.
+      this.dialog.addEventListener(
+        'wheel',
+        (event) => {
+          if (!this.zoomed || event.ctrlKey) return;
+          event.preventDefault();
+          this.panTo(this.panX - event.deltaX, this.panY - event.deltaY, false);
+        },
+        { passive: false }
+      );
 
       this.dialog.addEventListener('click', (event) => {
         const target = event.target as HTMLElement;
         const action = target.closest('[data-action]')?.getAttribute('data-action');
-        if (action === 'close') this.close();
-        if (action === 'prev') this.show(this.currentIndex - 1);
-        if (action === 'next') this.show(this.currentIndex + 1);
-        // Click on the backdrop itself (not any child) closes too.
-        if (event.target === this.dialog) this.close();
+        if (action === 'prev') return void this.show(this.requestedIndex - 1);
+        if (action === 'next') return void this.show(this.requestedIndex + 1);
+        if (action === 'close') return void this.close();
+
+        if (target === this.image) {
+          if (this.drag?.moved) return;
+          if (this.zoomed) this.zoomOut();
+          else this.zoomIn(event.clientX, event.clientY);
+          return;
+        }
+
+        // Only a press-and-release on empty space counts as "clicked off the photo".
+        const outside = target === this.dialog || target === this.figure;
+        if (outside && this.pointerDownTarget === target) this.dismiss();
       });
 
       this.dialog.addEventListener('keydown', (event) => {
-        if (event.key === 'ArrowLeft') this.show(this.currentIndex - 1);
-        if (event.key === 'ArrowRight') this.show(this.currentIndex + 1);
+        if (event.target === this.locationInput) {
+          // Typing in the dev location box must not page or close; Enter commits it.
+          if (event.key === 'Enter') this.locationInput?.blur();
+          return;
+        }
+        if (event.key === 'ArrowLeft') this.show(this.requestedIndex - 1);
+        if (event.key === 'ArrowRight') this.show(this.requestedIndex + 1);
       });
 
-      // Native <dialog> already closes on Escape; just restore focus after.
-      this.dialog.addEventListener('close', () => {
-        this.lastFocused?.focus();
+      // Escape fires `cancel`; route it through dismiss() so it animates and respects zoom.
+      this.dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        this.dismiss();
       });
+
+      this.locationInput?.addEventListener('change', () => this.saveLocation());
+
+      let touchX = 0;
+      let touchY = 0;
+      this.dialog.addEventListener('touchstart', (event) => {
+        touchX = event.touches[0].clientX;
+        touchY = event.touches[0].clientY;
+      }, { passive: true });
+      this.dialog.addEventListener('touchend', (event) => {
+        if (this.zoomed) return;
+        const dx = event.changedTouches[0].clientX - touchX;
+        const dy = event.changedTouches[0].clientY - touchY;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) this.show(this.requestedIndex + (dx < 0 ? 1 : -1));
+      });
+
+      window.addEventListener('resize', () => this.resetZoom(true));
     }
 
-    open(index: number, trigger: HTMLAnchorElement) {
-      this.lastFocused = trigger;
-      this.show(index);
+    /** The thumbnail's frame — measured instead of the <img>, which is scaled up inside it while scrolling. */
+    thumbnail(index: number): HTMLElement | null {
+      return this.items[index]?.querySelector('.img-frame') ?? null;
+    }
+
+    /* ---------- open / close ---------- */
+
+    open(index: number) {
+      const item = this.items[index];
+      if (!item) return;
+      this.requestedIndex = index;
+      // The grid thumbnail is already on screen, so show it right away and
+      // swap in the full-size file once it has decoded.
+      const thumb = item.querySelector<HTMLImageElement>('img.img-real');
+      const thumbSrc = thumb?.complete && thumb.naturalWidth ? thumb.currentSrc : '';
+      this.apply(index, thumbSrc || item.dataset.lightboxSrc || '');
       this.dialog.showModal();
+      const frame = this.thumbnail(index);
+      if (frame) this.morph(frame, 'grow');
+      this.upgrade(index);
+      this.preloadNeighbours(index);
     }
 
-    close() {
+    /** Escape / click outside: step out of zoom first, then leave the lightbox. */
+    dismiss() {
+      if (this.zoomed) this.zoomOut();
+      else this.close();
+    }
+
+    async close() {
+      if (!this.dialog.open || this.closing) return;
+      this.closing = true;
+      this.resetZoom(true);
+      const item = this.items[this.currentIndex];
+
+      // After paging through photos the current one may be off-screen; bring
+      // it into view behind the overlay so it can shrink back into place.
+      const rect = item.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        item.scrollIntoView({ block: 'center', behavior: 'instant' });
+      }
+
+      this.dialog.classList.add('is-closing');
+      const frame = this.thumbnail(this.currentIndex);
+      const animation = frame ? this.morph(frame, 'shrink') : null;
+      await animation?.finished.catch(() => {});
+
       this.dialog.close();
+      this.dialog.classList.remove('is-closing');
+      animation?.cancel();
+      item.classList.remove('is-lifted');
+      item.focus({ preventScroll: true });
+      this.closing = false;
     }
 
-    show(index: number) {
-      if (this.items.length === 0) return;
-      const wrapped = (index + this.items.length) % this.items.length;
-      const item = this.items[wrapped];
-      this.currentIndex = wrapped;
+    /* ---------- showing a photo ---------- */
 
-      this.image.src = item.dataset.lightboxSrc ?? '';
-      this.image.width = Number(item.dataset.lightboxWidth ?? 0);
-      this.image.height = Number(item.dataset.lightboxHeight ?? 0);
-      this.image.alt = item.dataset.lightboxTitle ?? '';
-      this.titleEl.textContent = item.dataset.lightboxTitle ?? '';
-      this.linkEl.href = item.dataset.lightboxHref ?? item.href;
+    /** Page to another photo. The new one is decoded first so it replaces the old one in a single step. */
+    async show(index: number) {
+      if (this.items.length === 0 || this.closing || !this.dialog.open) return;
+      const wrapped = (index + this.items.length) % this.items.length;
+      this.requestedIndex = wrapped;
+      const src = this.items[wrapped].dataset.lightboxSrc ?? '';
+      await preload(src);
+      // A newer click while this one was loading wins.
+      if (this.requestedIndex !== wrapped || this.closing) return;
+
+      this.resetZoom(true);
+      this.apply(wrapped, src);
+      if (!reducedMotion.matches) {
+        this.image.animate([{ opacity: 0.3, transform: 'scale(0.98)' }, { opacity: 1, transform: 'none' }], {
+          duration: 250,
+          easing: EASE,
+        });
+      }
+      this.preloadNeighbours(wrapped);
+    }
+
+    /** Put a photo's image and caption on screen. */
+    apply(index: number, src: string) {
+      const item = this.items[index];
+      const { lightboxWidth, lightboxHeight, lightboxTitle, lightboxCaption, lightboxDate, lightboxLocation } = item.dataset;
+
+      this.items[this.currentIndex]?.classList.remove('is-lifted');
+      item.classList.add('is-lifted');
+      this.currentIndex = index;
+
+      this.image.style.setProperty('--ar', `${Number(lightboxWidth) / Number(lightboxHeight) || 1.333}`);
+      this.image.src = src;
+      this.image.alt = lightboxTitle ?? '';
+      this.metaEl.textContent = lightboxDate ?? '';
+      this.titleEl.textContent = lightboxTitle ?? '';
+      this.descriptionEl.textContent = lightboxCaption ?? '';
+      if (this.locationInput) {
+        this.locationInput.value = lightboxLocation ?? '';
+        this.locationInput.classList.remove('is-saved', 'is-error');
+      }
+    }
+
+    /** Swap the thumbnail used for the opening animation for the full-size file. */
+    async upgrade(index: number) {
+      const src = this.items[index].dataset.lightboxSrc ?? '';
+      await preload(src);
+      if (this.currentIndex === index && this.dialog.open && !this.closing) this.image.src = src;
+    }
+
+    preloadNeighbours(index: number) {
+      const count = this.items.length;
+      preload(this.items[(index + 1) % count]?.dataset.lightboxSrc);
+      preload(this.items[(index - 1 + count) % count]?.dataset.lightboxSrc);
+    }
+
+    /* ---------- zoom ---------- */
+
+    /** Zoom to the photo's full size, keeping the clicked point under the cursor. */
+    zoomIn(clientX: number, clientY: number) {
+      const item = this.items[this.currentIndex];
+      const fit = this.image.getBoundingClientRect();
+      const full = Math.min(Number(item.dataset.lightboxWidth) || fit.width, MAX_WIDTH);
+      this.fit = fit;
+      this.scale = Math.max(full / fit.width, 1.5);
+      this.zoomed = true;
+      this.dialog.classList.add('is-zoomed');
+
+      const cx = fit.left + fit.width / 2;
+      const cy = fit.top + fit.height / 2;
+      this.panTo((clientX - cx) * (1 - this.scale), (clientY - cy) * (1 - this.scale), true);
+    }
+
+    zoomOut() {
+      this.zoomed = false;
+      this.dialog.classList.remove('is-zoomed');
+      this.panX = 0;
+      this.panY = 0;
+      this.paint(true);
+    }
+
+    /** Leave zoom without animating (used when paging or closing). */
+    resetZoom(instant = false) {
+      if (!this.zoomed) return;
+      this.zoomed = false;
+      this.dialog.classList.remove('is-zoomed', 'is-panning');
+      this.panX = 0;
+      this.panY = 0;
+      this.paint(!instant);
+    }
+
+    /** Move the zoomed photo, stopping its edges short of leaving a gap at the screen edge. */
+    panTo(x: number, y: number, animate: boolean) {
+      const fit = this.fit;
+      if (!fit) return;
+      const limit = (offset: number, size: number, centre: number, viewport: number) => {
+        const half = (size * this.scale) / 2;
+        // Photo bigger than the screen: keep it covering the screen. Smaller: keep it centred.
+        if (half * 2 <= viewport) return viewport / 2 - centre;
+        return Math.min(half - centre, Math.max(viewport - half - centre, offset));
+      };
+      this.panX = limit(x, fit.width, fit.left + fit.width / 2, window.innerWidth);
+      this.panY = limit(y, fit.height, fit.top + fit.height / 2, window.innerHeight);
+      this.paint(animate);
+    }
+
+    paint(animate: boolean) {
+      this.image.style.transition = animate && !reducedMotion.matches ? `transform 0.35s ${EASE}` : 'none';
+      this.image.style.transform = this.zoomed
+        ? `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`
+        : '';
+    }
+
+    /* ---------- dev only: edit the location ---------- */
+
+    /** Write the location box's text to the photo's .md file. */
+    async saveLocation() {
+      const input = this.locationInput;
+      const item = this.items[this.currentIndex];
+      if (!input || !item) return;
+      const location = input.value.trim();
+      try {
+        const response = await fetch('/__dev/location', {
+          method: 'POST',
+          body: JSON.stringify({ slug: item.dataset.lightboxSlug, location }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        // The dev server is told not to reload for this write, so keep the page in step ourselves.
+        const title = location || item.dataset.lightboxFallbackTitle || '';
+        item.dataset.lightboxLocation = location;
+        item.dataset.lightboxTitle = title;
+        if (this.items[this.currentIndex] === item) {
+          this.titleEl.textContent = title;
+          this.image.alt = title;
+          input.classList.remove('is-error');
+          input.classList.add('is-saved');
+          setTimeout(() => input.classList.remove('is-saved'), 1200);
+        }
+      } catch (error) {
+        console.error('Could not save location', error);
+        input.classList.add('is-error');
+      }
+    }
+
+    /* ---------- grow / shrink animation ---------- */
+
+    /** Animate the enlarged image between the thumbnail's position and its own. */
+    morph(thumb: HTMLElement, direction: 'grow' | 'shrink'): Animation | null {
+      if (reducedMotion.matches) return null;
+      const from = thumb.getBoundingClientRect();
+      const to = this.image.getBoundingClientRect();
+      if (!from.width || !to.width) return null;
+
+      const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+      const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+      const keyframes: Keyframe[] = [
+        { transform: `translate(${dx}px, ${dy}px) scale(${from.width / to.width})`, boxShadow: 'none' },
+        { transform: 'none' },
+      ];
+      if (direction === 'shrink') keyframes.reverse();
+      // Shrinking holds its end state until the dialog closes, or the image would flash back.
+      return this.image.animate(keyframes, { duration: 450, easing: EASE, fill: direction === 'shrink' ? 'forwards' : 'none' });
     }
   }
 

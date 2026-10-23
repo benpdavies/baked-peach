@@ -1,6 +1,4 @@
 ---
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -49,10 +47,8 @@ const ogImageUrl = ogImage ? new URL(ogImage.src, Astro.site) : null;
     <link rel="alternate" type="application/rss+xml" title={SITE_NAME} href="/rss.xml" />
   </head>
   <body>
-    <Header />
     <main class="site-wrap">
       <slot />
     </main>
-    <Footer />
   </body>
 </html>

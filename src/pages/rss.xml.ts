@@ -1,6 +1,6 @@
 import rss from '@astrojs/rss';
 import type { APIContext } from 'astro';
-import { getAllPhotos, photoUrl } from '../lib/photos';
+import { getAllPhotos, photoLabel, photoSlug } from '../lib/photos';
 
 export async function GET(context: APIContext) {
   const photos = await getAllPhotos();
@@ -10,10 +10,10 @@ export async function GET(context: APIContext) {
     description: 'Latest photos.',
     site: context.site!,
     items: photos.map((photo) => ({
-      title: photo.data.title,
+      title: photoLabel(photo),
       description: photo.data.description,
       pubDate: photo.data.date,
-      link: photoUrl(photo),
+      link: `/#${photoSlug(photo)}`,
     })),
   });
 }
