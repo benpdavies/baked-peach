@@ -12,7 +12,7 @@ const { photos } = Astro.props;
 const items = await Promise.all(
   photos.map(async (photo) => {
     const { width } = photo.data.image;
-    const lightbox = await getImage({ src: photo.data.image, width: Math.min(width, 2560), format: 'webp', quality: 82 });
+    const lightbox = await getImage({ src: photo.data.image, width: Math.min(width, 2560), format: 'webp', quality: 92 });
     return { photo, lightbox };
   })
 );

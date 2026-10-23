@@ -6,7 +6,7 @@ export async function GET(context: APIContext) {
   const photos = await getAllPhotos();
 
   return rss({
-    title: 'Your Name Photography',
+    title: 'Baked Peach',
     description: 'Latest photos.',
     site: context.site!,
     items: photos.map((photo) => ({

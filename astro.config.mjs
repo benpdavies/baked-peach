@@ -4,9 +4,8 @@ import sitemap from '@astrojs/sitemap';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// TODO: replace with your real domain once you have one — required for
 // correct sitemap/RSS URLs and Open Graph tags.
-const SITE_URL = 'https://example.com';
+const SITE_URL = 'https://www.baked-peach.co.uk';
 
 // Dev-only: lets the lightbox's location box save straight into a photo's
 // .md frontmatter. `configureServer` never runs for `astro build`, so none of
