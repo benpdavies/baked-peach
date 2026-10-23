@@ -441,7 +441,9 @@ const dev = import.meta.env.DEV;
       this.resetZoom(true);
       this.apply(wrapped, src);
       if (!reducedMotion.matches) {
-        this.image.animate([{ opacity: 0.3, transform: 'scale(0.98)' }, { opacity: 1, transform: 'none' }], {
+        // Dim rather than fade: the backdrop is see-through, so a translucent photo
+        // would let the grid thumbnail behind it show for a moment.
+        this.image.animate([{ filter: 'brightness(0.3)', transform: 'scale(0.98)' }, { filter: 'none', transform: 'none' }], {
           duration: 250,
           easing: EASE,
         });
