@@ -1,0 +1,8 @@
+{
+  "name": "baked-peach",
+  "compatibility_date": "2026-10-29",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

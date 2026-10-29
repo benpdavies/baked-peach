@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Static photography portfolio built with Astro 7 (Node >= 22.12), deployed to Cloudflare Pages via GitHub Actions on push to `main`. There is no test or lint setup; `npm run astro check` type-checks `.astro`/TS files.
+Static photography portfolio built with Astro 7 (Node >= 22.12), deployed as a Cloudflare Workers static-assets site (`wrangler.jsonc`) by Cloudflare Workers Builds, which is connected to the GitHub repo and builds (`npm run build`) and deploys (`npx wrangler deploy`) on push to `main`. There is no GitHub Actions workflow. There is no test or lint setup; `npm run astro check` type-checks `.astro`/TS files.
 
 ## Commands
 
@@ -30,7 +30,7 @@ Manage the background server with `astro dev stop`, `astro dev status`, and `ast
 - **Data layer** is `src/lib/photos.ts`: `photoSlug` (filename without extension; the grid item's `id`), `photoLabel` (location, else title), `photoMonthYear`, and `getAllPhotos`. Photos are sorted by frontmatter `date`, newest first, with filename (descending, numeric-aware) as the tiebreaker, so `date` determines display order everywhere. `add-photos` fills `date` from EXIF.
 - **Pages** (`src/pages/`): `index.astro` (grid + lightbox; there are no per-photo detail pages), `404.astro`, plus `rss.xml.ts` and `robots.txt.ts`. Sitemap comes from `@astrojs/sitemap`.
 - **Components**: `ResponsiveImage.astro` wraps Astro's `<Image />` (responsive layout + blurred placeholder); `PhotoGrid.astro` renders thumbnails as real links to the full-size image (it reads image dimensions via Astro's private `clone`, because reading any property of the imported image makes Astro copy the multi-MB original into `dist/`); `Lightbox.astro` is a custom element around a native `<dialog>` and is the only client-side JS on the site — keep everything else zero-JS and keep the grid usable without JS. In `astro dev` only, the lightbox shows a location text box that POSTs to `/__dev/location`, a Vite middleware in `astro.config.mjs` that rewrites the photo's `.md` frontmatter (it doesn't exist in builds). The same plugin drops the dev server's full-page reload for ~5s after a save so the lightbox isn't disturbed; the grid picks up the new text on the next manual refresh. Lightbox behaviour: click a thumbnail to open, click the photo to zoom to full size (drag/scroll to pan), click outside or Esc to zoom out then close, ‹ › / arrow keys / swipe to page.
-- `public/_headers` gives hashed `/_astro/*` files a one-year immutable Cache-Control on Cloudflare Pages. CI caches `node_modules/.astro` (Astro's resized-image cache) so only new photos are processed.
+- `public/_headers` gives hashed `/_astro/*` files a one-year immutable Cache-Control on Cloudflare. Astro's resized-image cache lives in `node_modules/.astro`; enable the build cache in Workers Builds settings so only new photos are processed.
 - `astro.config.mjs` has `SITE_URL = 'https://www.baked-peach.co.uk'`, which feeds sitemap, RSS, canonical and OG URLs.
 
 ## Adding photos

@@ -1,6 +1,6 @@
 # Photography Portfolio
 
-A static photography portfolio built with [Astro](https://astro.build), deployed to Cloudflare Pages, with code hosted on GitHub.
+A static photography portfolio built with [Astro](https://astro.build), deployed to Cloudflare Workers, with code hosted on GitHub.
 
 ## Running locally
 
@@ -100,21 +100,23 @@ usable with JavaScript disabled.
 
 ## Deployment
 
-Code is hosted on GitHub; the production site is Cloudflare Pages, deployed via the
-GitHub Actions workflow at `.github/workflows/deploy.yml` on every push to `main`.
+Code is hosted on GitHub; the production site is a Cloudflare Workers static-assets
+site (configured in `wrangler.jsonc`). Cloudflare Workers Builds is connected to the
+GitHub repo and, on every push to `main`, runs `npm run build` and `npx wrangler deploy`.
+Other branches get preview URLs. There is no GitHub Actions workflow.
 
 **One-time setup:**
 
-1. Create the Cloudflare Pages project (dashboard, or `npx wrangler pages project create <name>`)
-   and update `projectName` in `.github/workflows/deploy.yml` to match.
-2. In the GitHub repo, add two secrets (Settings → Secrets and variables → Actions):
-   - `CLOUDFLARE_API_TOKEN` — a token scoped to "Cloudflare Pages: Edit"
-   - `CLOUDFLARE_ACCOUNT_ID` — found on the Cloudflare dashboard's right sidebar
-3. Push to `main` — the workflow builds (`npm run build`) and deploys the `dist/` folder.
+1. In the Cloudflare dashboard, go to Workers & Pages → Create application → Import a
+   repository, authorise the Cloudflare GitHub app, and select this repo and the `main` branch.
+2. Set the Worker name to `baked-peach` (it must match `name` in `wrangler.jsonc`), the build
+   command to `npm run build` and the deploy command to `npx wrangler deploy`.
+3. Add a build variable `NODE_VERSION` = `22`, and optionally enable the build cache so only
+   new photos are re-processed.
+4. Save and deploy. Add the custom domain under the Worker's Settings → Domains & Routes.
 
-**Before going live**, update the placeholder domain in `astro.config.mjs`
-(`SITE_URL`, currently `https://example.com`) to your real domain — it's used to build
-the sitemap, RSS links, canonical URLs, and Open Graph URLs.
+The domain in `astro.config.mjs` (`SITE_URL`) is used to build the sitemap, RSS links,
+canonical URLs, and Open Graph URLs — update it if the live domain changes.
 
 ## Not included (on purpose)
 
