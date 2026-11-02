@@ -4,5 +4,9 @@
   "assets": {
     "directory": "./dist",
     "not_found_handling": "404-page"
-  }
+  },
+  "routes": [
+    { "pattern": "baked-peach.co.uk", "custom_domain": true },
+    { "pattern": "www.baked-peach.co.uk", "custom_domain": true }
+  ]
 }
